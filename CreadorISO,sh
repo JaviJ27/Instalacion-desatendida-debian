@@ -1,0 +1,57 @@
+#!/bin/bash
+root() {
+  check_root=$(id -u)
+  if [[ $check_root -ne 0 ]];then
+    echo "Usted no es ROOT, así que no puede ejecutar ese scipt"
+    exit 1
+  fi
+}
+root
+
+rm preseed-debian-13.1.0-amd64-netinst.iso
+
+xorriso -osirrox on -indev debian-13.1.0-amd64-netinst.iso  -extract / isofiles/
+
+chmod +w -R isofiles/install.amd/
+gunzip isofiles/install.amd/initrd.gz
+echo preseed.cfg | cpio -H newc -o -A -F isofiles/install.amd/initrd
+gzip isofiles/install.amd/initrd
+chmod -w -R isofiles/install.amd/
+
+chmod +w -R isofiles/install.amd/
+gunzip isofiles/install.amd/gtk/initrd.gz
+echo preseed.cfg | cpio -H newc -o -A -F isofiles/install.amd/gtk/initrd
+gzip isofiles/install.amd/gtk/initrd
+chmod -w -R isofiles/install.amd/
+
+sed -i 's/default vesamenu.c32//' isofiles/isolinux/isolinux.cfg
+
+echo "set timeout_style=hidden" | sudo tee -a isofiles/boot/grub/grub.cfg
+echo "set timeout=0" | sudo tee -a isofiles/boot/grub/grub.cfg
+echo "set default=1" | sudo tee -a isofiles/boot/grub/grub.cfg
+
+cd isofiles/
+chmod a+w md5sum.txt
+find -follow -type f -exec md5sum {} \; > md5sum.txt
+chmod a-w md5sum.txt
+cd ..
+
+chmod a+w isofiles/isolinux/isolinux.bin
+
+#genisoimage -r -J -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -o preseed-debian-13.1.0-amd64-netinst.iso isofiles
+xorriso -as mkisofs \
+    -r -V "Debian Preseed" \
+    -o preseed-debian-13.1.0-amd64-netinst.iso \
+    -J -joliet-long \
+    -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
+    -c isolinux/boot.cat \
+    -b isolinux/isolinux.bin \
+    -no-emul-boot -boot-load-size 4 -boot-info-table \
+    -eltorito-alt-boot \
+    -e boot/grub/efi.img \
+    -no-emul-boot \
+    -isohybrid-gpt-basdat \
+    isofiles
+
+rm -rf isofiles/
+cp --remove-destination preseed-debian-13.1.0-amd64-netinst.iso /home/javier/Javi/ISOS/
